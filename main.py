@@ -1,4 +1,8 @@
 import os
+import threading
+import csv
+import time
+import itertools
 
 from detector import Detector
 from paddleocr import PaddleOCR
@@ -8,16 +12,90 @@ import easyocr
 import requests
 
 class number(object):
-    def __init__(self, gpu=False, times=2):
+    def __init__(self, gpu=False, times=2, ua="ARNRS"):
         assert type(gpu) is bool
         assert type(times) is int and times >= 1
         self.gpu = gpu
         self.times = times
+        self.similar = {"8": "B", "o": "0", "-": "—"}
+        self.ua = ua
 
         # Init detector and OCR
         self.__detector = Detector(device="gpu" if gpu else "cpu")
         self.__eocr = easyocr.Reader(['ch_sim', 'en'], gpu=self.gpu)
         self.__pocr = PaddleOCR(use_angle_cls=True, use_gpu=self.gpu, show_log=False)
+
+        # Init database
+        self.__database = []
+        i = 0
+        with open('aircraftDatabase.csv', "r", encoding='utf-8') as fb:
+            for row in csv.reader(fb, skipinitialspace=True):
+                if not i:
+                    keys = row
+                else:
+                    self.__database.append(dict(zip(keys, row)))
+                i += 1
+
+        # Try to update database
+        update_database_daemon_thread = threading.Thread(target=self.__update_database_daemon, name="Update Database Daemon Thread")
+        update_database_daemon_thread.daemon = True
+        update_database_daemon_thread.start()
+
+    def __update_database_daemon(self):
+        while True:
+            update_database_thread = threading.Thread(target=self.__update_database, name="Update Database Thread")
+            update_database_thread.daemon = True
+            update_database_thread.start()
+
+            time.sleep(60 * 60 * 1)
+
+    def __update_database(self):
+        f = 0
+        while True:
+            try:
+                database = requests.get("https://opensky-network.org/datasets/metadata/aircraftDatabase.csv", headers={"user-agent": self.ua}).text
+            except Exception as e:
+                print("Failed to update local registration number database,", e, ", retrying... Times: ", f+1)
+                f += 1
+                if f >= 10:
+                    break
+            else:
+                with open('aircraftDatabase.csv', "w+", encoding='utf-8') as fb:
+                    fb.write(database)
+                self.__database = []
+                i = 0
+                with open('aircraftDatabase.csv', "r", encoding='utf-8') as fb:
+                    for row in csv.reader(fb, skipinitialspace=True):
+                        if not i:
+                            keys = row
+                        else:
+                            self.__database.append(dict(zip(keys, row)))
+                        i += 1
+                break
+
+    def search(self, keyword):
+        '''
+        Search a plane by it registration number
+        :keyword Registration number
+        '''
+        for i in self.__database:
+            if i["registration"] == keyword:
+                return i
+        
+        # Similar characters replace
+        self.similar = {**self.similar, **dict(zip(self.similar.values(), self.similar.keys()))}
+        condition = []
+        for i in range(1, len(self.similar.items()) + 1):
+            condition.extend(list(itertools.combinations(self.similar.items(), i)))
+
+        for c in condition:
+            for c_i in c:
+                keyword_temp = keyword.replace(c_i[0], c_i[1])
+                for i in self.__database:
+                    if i["registration"] == keyword_temp:
+                        return i
+        
+        return None
 
     def recognize(self, image):
         '''
@@ -65,8 +143,8 @@ class number(object):
 
         # Read database
         for i in ocr_result:
-            db = requests.post("http://www.airframes.org/", data={"reg1": i[1]}).text
-            if "No data found on this query." not in db:
-                return i
-
+            r = self.search(i[1])
+            if r:
+                return r
+        
         return None
