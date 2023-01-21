@@ -78,6 +78,37 @@ class number(object):
                         i += 1
                 break
 
+    def __distance(self, p1, p2):
+        return ((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2) ** 0.5
+
+    def __closest_pair(self, X, Y):
+        if len(X) <= 3:
+            return min([self.__distance(X[i], X[j]) for i in range(len(X)) for j in range(i+1, len(X))])
+
+        mid = len(X)//2
+        XL, XR = X[:mid], X[mid:]
+        YL, YR = [p for p in Y if p in XL], [p for p in Y if p in XR]
+
+        d = min(self.__closest_pair(XL, YL), self.__closest_pair(XR, YR))
+
+        line = (X[mid][0] + X[mid-1][0]) / 2
+        YS = [p for p in Y if abs(p[0]-line) < d]
+
+        return min(d, self.__closest_split_pair(YS, d))
+
+    def __closest_split_pair(self, Y, d):
+        n = len(Y)
+        for i in range(n-1):
+            for j in range(i+1, min(i+8, n)):
+                if self.__distance(Y[i], Y[j]) < d:
+                    d = self.__distance(Y[i], Y[j])
+        return d
+
+    def __dis(self, p1, p2):
+        X = p1 + p2
+        Y = sorted(X, key=lambda p: (p[0], p[1]))
+        return self.__closest_pair(X, Y)
+
     def search(self, keyword):
         '''
         Search a plane by it registration number
@@ -131,30 +162,73 @@ class number(object):
         ocr_filter = []
 
         for _ in range(self.times):
-            eocr_result = self.__eocr.readtext(img, detail=1)
-            if self.debug:
-                print(eocr_result)
-                print("------------------------------")
+            # OCR recognize
             pocr_result = self.__pocr.ocr(img, cls=True)
             if self.debug:
                 print(pocr_result)
-                print("------------------------------")
-            for e in eocr_result:
-                if e[2] > self.filter and e[1] not in ocr_filter:
-                    ocr_result.append(
-                        (tuple([tuple(i) for i in e[0]]), e[1], e[2])
-                    )
-                    ocr_filter.append(e[1])
+                print("------------------------------B-")
+            eocr_result = self.__eocr.readtext(img, detail=1)
+            if self.debug:
+                print(eocr_result)
+                print("------------------------------A-")
+
+            # OCR results tidy up
+            for i in range(len(pocr_result[0])):
+                for j in range(len(pocr_result[0])):
+                    if self.debug:
+                        print("------------------------------D-")
+                        print(pocr_result[0][i][0], pocr_result[0][j][0])
+                    if i != j and len(pocr_result[0][i][0]) == 4 and len(pocr_result[0][j][0]) == 4 and self.__dis(pocr_result[0][i][0], pocr_result[0][j][0]) < 5:
+                        if self.debug:
+                            print("D Appended")
+                        pocr_result.append(((pocr_result[0][i][0], pocr_result[0][j][0]), pocr_result[0][i][1][1] + pocr_result[0][j][1][1], (pocr_result[0][i][1][2] + pocr_result[0][j][1][2]) / 2))
+                        pocr_result.append(((pocr_result[0][j][0], pocr_result[0][i][0]), pocr_result[0][j][1][1] + pocr_result[0][i][1][1], (pocr_result[0][j][1][2] + pocr_result[0][i][1][2]) / 2))
+                    else:
+                        if self.debug:
+                            disout = 0
+                            if len(eocr_result[i][0]) == 4 and len(eocr_result[j][0]) == 4:
+                                disout = self.__dis(pocr_result[0][i][0], pocr_result[0][j][0])
+                            print(i != j, len(pocr_result[0][i][0]) == 4, len(pocr_result[0][j][0]) == 4, disout)
+                            print("------------------------------D-")
+
+            for i in range(len(eocr_result)):
+                for j in range(len(eocr_result)):
+                    if self.debug:
+                        print("------------------------------C-")
+                        print(eocr_result[i][0], eocr_result[j][0])
+                    if i != j and len(eocr_result[i][0]) == 4 and len(eocr_result[j][0]) == 4 and self.__dis(eocr_result[i][0], eocr_result[j][0]) < 5:
+                        if self.debug:
+                            print("C Appended")
+                        eocr_result.append(((eocr_result[i][0], eocr_result[j][0]), eocr_result[i][1] + eocr_result[j][1], (eocr_result[i][2] + eocr_result[j][2]) / 2))
+                        eocr_result.append(((eocr_result[j][0], eocr_result[i][0]), eocr_result[j][1] + eocr_result[i][1], (eocr_result[j][2] + eocr_result[i][2]) / 2))
+                    else:
+                        if self.debug:
+                            disout = 0
+                            if len(eocr_result[i][0]) == 4 and len(eocr_result[j][0]) == 4:
+                                disout = self.__dis(eocr_result[i][0], eocr_result[j][0])
+                            print(i != j, len(eocr_result[i][0]) == 4, len(eocr_result[j][0]) == 4, disout)
+                            print("------------------------------C-")
+
+            pocr_result = [sorted(pocr_result[0], key=lambda x: len(x[1][0]), reverse=True)]
+            eocr_result = sorted(eocr_result, key=lambda x: len(x[1]), reverse=True)
+
+            if self.debug:
+                print(pocr_result)
+                print(eocr_result)
+
+            # OCR results sum up
             for p in pocr_result[0]:
                 if p[1][1] > self.filter and p[1][0] not in ocr_filter:
                     ocr_result.append(
                         (tuple([tuple(i) for i in p[0]]), p[1][0], p[1][1])
                     )
                     ocr_filter.append(p[1][0])
-
-        # OCR result tidy up
-
-
+            for e in eocr_result:
+                if e[2] > self.filter and e[1] not in ocr_filter:
+                    ocr_result.append(
+                        (tuple([tuple(i) for i in e[0]]), e[1], e[2])
+                    )
+                    ocr_filter.append(e[1])
 
         # Read database
         for i in ocr_result:
@@ -167,7 +241,9 @@ class number(object):
         return None
 
 if __name__ == "__main__":
+    import json
     num = number()
+    os.makedirs("out", exist_ok=True)
     for pic in os.listdir("test"):
-        print(pic, ":")
-        print(num.recognize(os.path.join("test", pic)))
+        with open(os.path.join("out", f"{pic}.json"), "w+") as fb:
+            fb.write(json.dumps(num.recognize(os.path.join("test", pic))))
