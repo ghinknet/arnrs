@@ -230,6 +230,8 @@ class number(object):
                     )
                     ocr_filter.append(e[1])
 
+            ocr_result = sorted(ocr_result, key=lambda x:len(x[1]), reverse=True)
+
         # Read database
         for i in ocr_result:
             r = self.search(i[1])
