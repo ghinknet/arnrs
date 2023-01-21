@@ -12,34 +12,39 @@ import easyocr
 import requests
 
 class number(object):
-    def __init__(self, gpu=False, times=2, ua="ARNRS"):
+    def __init__(self, gpu=False, times=1, filter=0.8, ua="ARNRS", debug=False):
         assert type(gpu) is bool
         assert type(times) is int and times >= 1
         self.gpu = gpu
         self.times = times
-        self.similar = {"8": "B", "o": "0", "-": "—"}
+        self.similar = {"8": "B", "O": "0", "-": "—", "1": "/", "l": "I", "2": "Z", "4": "A"}
         self.ua = ua
+        self.filter = filter
+        self.debug = debug
 
         # Init detector and OCR
         self.__detector = Detector(device="gpu" if gpu else "cpu")
         self.__eocr = easyocr.Reader(['ch_sim', 'en'], gpu=self.gpu)
-        self.__pocr = PaddleOCR(use_angle_cls=True, use_gpu=self.gpu, show_log=False)
+        self.__pocr = PaddleOCR(use_angle_cls=True, use_gpu=self.gpu, show_log=debug)
 
         # Init database
-        self.__database = []
+        self.__database = {}
         i = 0
         with open('aircraftDatabase.csv', "r", encoding='utf-8') as fb:
             for row in csv.reader(fb, skipinitialspace=True):
                 if not i:
                     keys = row
                 else:
-                    self.__database.append(dict(zip(keys, row)))
+                    self.__database[row[1]] = dict(zip(keys, row))
+                    self.__database[row[1].replace("-", "")] = dict(zip(keys, row))
                 i += 1
 
         # Try to update database
+        '''
         update_database_daemon_thread = threading.Thread(target=self.__update_database_daemon, name="Update Database Daemon Thread")
         update_database_daemon_thread.daemon = True
         update_database_daemon_thread.start()
+        '''
 
     def __update_database_daemon(self):
         while True:
@@ -78,9 +83,8 @@ class number(object):
         Search a plane by it registration number
         :keyword Registration number
         '''
-        for i in self.__database:
-            if i["registration"] == keyword:
-                return i
+        if keyword.upper() in self.__database.keys() and not keyword.isdigit():
+            return self.__database[keyword.upper()]
         
         # Similar characters replace
         self.similar = {**self.similar, **dict(zip(self.similar.values(), self.similar.keys()))}
@@ -91,10 +95,12 @@ class number(object):
         for c in condition:
             for c_i in c:
                 keyword_temp = keyword.replace(c_i[0], c_i[1])
-                for i in self.__database:
-                    if i["registration"] == keyword_temp:
-                        return i
+                if keyword_temp.upper() in self.__database.keys():
+                    return self.__database[keyword_temp.upper()]
         
+        if keyword.upper() in self.__database.keys() and keyword.isdigit():
+            return self.__database[keyword.upper()]
+
         return None
 
     def recognize(self, image):
@@ -124,22 +130,31 @@ class number(object):
         ocr_result = []
         ocr_filter = []
 
-        for _ in range(2):
+        for _ in range(self.times):
             eocr_result = self.__eocr.readtext(img, detail=1)
+            if self.debug:
+                print(eocr_result)
+                print("------------------------------")
             pocr_result = self.__pocr.ocr(img, cls=True)
-
+            if self.debug:
+                print(pocr_result)
+                print("------------------------------")
             for e in eocr_result:
-                if e[2] > 0.6 and e[1] not in ocr_filter:
+                if e[2] > self.filter and e[1] not in ocr_filter:
                     ocr_result.append(
                         (tuple([tuple(i) for i in e[0]]), e[1], e[2])
                     )
                     ocr_filter.append(e[1])
             for p in pocr_result[0]:
-                if p[1][1] > 0.6 and e[1][0] not in ocr_filter:
+                if p[1][1] > self.filter and p[1][0] not in ocr_filter:
                     ocr_result.append(
-                        (tuple([tuple(i) for i in p[0]]), e[1][0], e[1][1])
+                        (tuple([tuple(i) for i in p[0]]), p[1][0], p[1][1])
                     )
-                    ocr_filter.append(e[1][0])
+                    ocr_filter.append(p[1][0])
+
+        # OCR result tidy up
+
+
 
         # Read database
         for i in ocr_result:
@@ -147,4 +162,12 @@ class number(object):
             if r:
                 return r
         
+        if self.debug:
+            print(ocr_result)
         return None
+
+if __name__ == "__main__":
+    num = number()
+    for pic in os.listdir("test"):
+        print(pic, ":")
+        print(num.recognize(os.path.join("test", pic)))
