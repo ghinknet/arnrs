@@ -79,27 +79,27 @@ class number(object):
                 break
 
     def __distance(self, p1, p2):
-        return ((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2) ** 0.5
+        return ((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5
 
     def __closest_pair(self, X, Y):
         if len(X) <= 3:
-            return min([self.__distance(X[i], X[j]) for i in range(len(X)) for j in range(i+1, len(X))])
+            return min([self.__distance(X[i], X[j]) for i in range(len(X)) for j in range(i + 1, len(X))])
 
-        mid = len(X)//2
+        mid = len(X) // 2
         XL, XR = X[:mid], X[mid:]
         YL, YR = [p for p in Y if p in XL], [p for p in Y if p in XR]
 
         d = min(self.__closest_pair(XL, YL), self.__closest_pair(XR, YR))
 
         line = (X[mid][0] + X[mid-1][0]) / 2
-        YS = [p for p in Y if abs(p[0]-line) < d]
+        YS = [p for p in Y if abs(p[0] - line) < d]
 
         return min(d, self.__closest_split_pair(YS, d))
 
     def __closest_split_pair(self, Y, d):
         n = len(Y)
-        for i in range(n-1):
-            for j in range(i+1, min(i+8, n)):
+        for i in range(n - 1):
+            for j in range(i + 1, min(i + 8, n)):
                 if self.__distance(Y[i], Y[j]) < d:
                     d = self.__distance(Y[i], Y[j])
         return d
@@ -209,9 +209,6 @@ class number(object):
                             print(i != j, len(eocr_result[i][0]) == 4, len(eocr_result[j][0]) == 4, disout)
                             print("------------------------------C-")
 
-            pocr_result = [sorted(pocr_result[0], key=lambda x: len(x[1][0]), reverse=True)]
-            eocr_result = sorted(eocr_result, key=lambda x: len(x[1]), reverse=True)
-
             if self.debug:
                 print(pocr_result)
                 print(eocr_result)
@@ -230,7 +227,7 @@ class number(object):
                     )
                     ocr_filter.append(e[1])
 
-            ocr_result = sorted(ocr_result, key=lambda x:len(x[1]), reverse=True)
+        ocr_result = sorted(ocr_result, key=lambda x:len(x[1]), reverse=True)
 
         # Read database
         for i in ocr_result:
