@@ -23,7 +23,7 @@ class number(object):
         self.debug = debug
 
         # Init detector and OCR
-        self.__detector = Detector(device="gpu" if gpu else "cpu")
+        self.__detector = Detector(device="cuda" if gpu else "cpu")
         self.__eocr = easyocr.Reader(['ch_sim', 'en'], gpu=self.gpu)
         self.__pocr = PaddleOCR(use_angle_cls=True, use_gpu=self.gpu, show_log=debug)
 
